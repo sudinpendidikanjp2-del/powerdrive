@@ -143,6 +143,21 @@ export class StorageService {
   /**
    * Initialize a resumable chunk upload session
    */
+  /** Session metadata for authorization checks, recovering it from disk after a restart. */
+  public static peekChunkSession(uploadId: string): { folderId: string; userId?: string } | null {
+    if (!/^upl_[\w]+$/.test(uploadId)) return null;
+    const live = this.chunkSessions.get(uploadId);
+    if (live) return { folderId: live.folderId, userId: live.userId };
+    const metaFile = path.join(this.tempChunksPath, uploadId, "meta.json");
+    if (!fs.existsSync(metaFile)) return null;
+    try {
+      const meta = JSON.parse(fs.readFileSync(metaFile, "utf-8"));
+      return { folderId: meta.folderId, userId: meta.userId };
+    } catch {
+      return null;
+    }
+  }
+
   public static async initChunkUpload({
     fileName,
     fileSize,
@@ -176,7 +191,7 @@ export class StorageService {
     }
 
     // 2. Generate unique uploadId
-    const uploadId = `upl_${Date.now()}_${crypto.randomBytes(4).toString("hex")}`;
+    const uploadId = `upl_${Date.now()}_${crypto.randomBytes(16).toString("hex")}`;
     const chunkDir = path.join(this.tempChunksPath, uploadId);
     if (!fs.existsSync(chunkDir)) {
       fs.mkdirSync(chunkDir, { recursive: true });

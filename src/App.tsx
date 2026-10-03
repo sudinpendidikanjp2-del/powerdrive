@@ -31,13 +31,14 @@ function readShareParams() {
   try {
     const params = new URLSearchParams(window.location.search);
     return {
+      shareId: params.get("s"),
       folderId: params.get("folderId") || params.get("folder"),
       fileId: params.get("fileId") || params.get("file"),
       perm: params.get("perm") || params.get("permission"),
       sig: params.get("sig") || params.get("signature") || params.get("token"),
     };
   } catch {
-    return { folderId: null, fileId: null, perm: null, sig: null };
+    return { shareId: null, folderId: null, fileId: null, perm: null, sig: null };
   }
 }
 
@@ -79,10 +80,13 @@ function MainApp() {
 
   if (isAuthLoading) return <FullScreenLoader label="Memuat Power Drive" />;
 
-  if ((shareParams.folderId || shareParams.fileId) && !forceShowLogin) {
+  const isShareLink = !!(shareParams.shareId || shareParams.folderId || shareParams.fileId);
+
+  if (isShareLink && !forceShowLogin) {
     return (
       <Suspense fallback={<FullScreenLoader label="Membuka tautan" />}>
         <PublicSharedFolderView
+          shareId={shareParams.shareId || undefined}
           initialFolderId={shareParams.folderId || undefined}
           fileId={shareParams.fileId || undefined}
           permParam={shareParams.perm}
@@ -100,7 +104,7 @@ function MainApp() {
       <Suspense fallback={<FullScreenLoader label="Memuat" />}>
         <AuthView
           onSuccess={fetchGlobalData}
-          onBackToSharedFolder={shareParams.folderId || shareParams.fileId ? () => setForceShowLogin(false) : undefined}
+          onBackToSharedFolder={isShareLink ? () => setForceShowLogin(false) : undefined}
         />
       </Suspense>
     );

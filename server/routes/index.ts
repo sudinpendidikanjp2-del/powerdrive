@@ -7,6 +7,7 @@ import { storageRouter } from "./storage.routes.ts";
 import { syncRouter } from "./sync.routes.ts";
 import { mountRouter } from "./mount.routes.ts";
 import { trashRouter } from "./trash.routes.ts";
+import { shareRouter } from "./share.routes.ts";
 import { runAuthSelfTest } from "../tests/auth.test.ts";
 import { runDatabaseSelfTest } from "../db/test-db.ts";
 import { runGoogleDriveSelfTest } from "../tests/google.test.ts";
@@ -24,6 +25,7 @@ apiRouter.use("/storage", storageRouter);
 apiRouter.use("/sync", syncRouter);
 apiRouter.use("/mounts", mountRouter);
 apiRouter.use("/trash", trashRouter);
+apiRouter.use("/shares", shareRouter);
 
 // Health check endpoint
 apiRouter.get("/health", (req, res) => {

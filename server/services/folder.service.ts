@@ -59,7 +59,10 @@ export class FolderService {
     if (parentId !== undefined) {
       where.parentId = parentId === "root" || parentId === "null" || parentId === "" ? null : parentId;
     }
-    if (user && user.role !== "ADMIN") {
+    // Root and account-wide listings show a user's own folders. Listing inside a
+    // specific folder is authorized by the route guard (owner, admin or share link).
+    const scoped = parentId !== undefined && parentId !== null && !["root", "null", ""].includes(parentId);
+    if (user && user.role !== "ADMIN" && !scoped) {
       where.ownerId = user.id;
     }
     if (search && search.trim()) {

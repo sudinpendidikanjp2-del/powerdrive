@@ -3,6 +3,8 @@ import { AuthenticatedRequest } from "../middleware/auth.ts";
 import { FolderService } from "../services/folder.service.ts";
 import { GoogleDriveService } from "../services/google-drive.service.ts";
 import { ShareTokenService } from "../services/share-token.service.ts";
+import { ShareLinkService } from "../services/share-link.service.ts";
+import { AccessService } from "../services/access.service.ts";
 import { DriveType } from "../types/index.ts";
 import { db } from "../db/index.ts";
 
@@ -64,7 +66,7 @@ export class FolderController {
         return;
       }
 
-      const breadcrumbs = await FolderService.getFolderBreadcrumbs(id, req.user);
+      const breadcrumbs = AccessService.trimToShareRoot(req, await FolderService.getFolderBreadcrumbs(id, req.user));
 
       res.status(200).json({
         success: true,
@@ -81,7 +83,7 @@ export class FolderController {
   public static async getBreadcrumbs(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
       const { id } = req.params;
-      const breadcrumbs = await FolderService.getFolderBreadcrumbs(id, req.user);
+      const breadcrumbs = AccessService.trimToShareRoot(req, await FolderService.getFolderBreadcrumbs(id, req.user));
       res.status(200).json({
         success: true,
         data: { breadcrumbs },
@@ -405,44 +407,6 @@ export class FolderController {
     }
   }
 
-  public static async getShareLinks(req: AuthenticatedRequest, res: Response): Promise<void> {
-    try {
-      const { id } = req.params;
-      const { pwdHash, emails } = req.query;
-      const folder = await FolderService.getFolderById(id);
-      if (!folder) {
-        res.status(404).json({
-          success: false,
-          error: "Folder not found",
-        });
-        return;
-      }
-      if (req.user?.role !== "ADMIN" && folder.ownerId !== req.user?.id) {
-        res.status(403).json({ success: false, error: "Hanya pemilik folder yang dapat membuat tautan bagikan." });
-        return;
-      }
-
-      const host = req.get("host") || "";
-      const protocol = req.protocol || "https";
-      const origin = `${protocol}://${host}`;
-
-      const links = ShareTokenService.getSecuredLinks(id, origin, pwdHash as string, emails as string);
-
-      res.status(200).json({
-        success: true,
-        data: {
-          folder,
-          links,
-        },
-      });
-    } catch (error: any) {
-      res.status(500).json({
-        success: false,
-        error: error.message || "Failed to generate share links",
-      });
-    }
-  }
-
   public static async verifyShareToken(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
       const { folderId, fileId, permission, signature, sig, token, pwdHash, emails } = req.body;
@@ -458,6 +422,13 @@ export class FolderController {
       }
 
       const isValid = ShareTokenService.verifySignature(itemId, permission, effectiveSig, pwdHash, emails);
+      // Legacy links put the allowed emails in the URL; at least require the visitor to name one.
+      const emailList = typeof emails === "string" ? emails.toLowerCase().split(/[,;\s]+/).filter(Boolean) : [];
+      const emailInput = String(req.body.emailInput || "").trim().toLowerCase();
+      if (isValid && emailList.length > 0 && !emailList.includes(emailInput)) {
+        res.status(403).json({ success: false, error: "Email ini tidak diizinkan membuka tautan.", data: { isValid: false } });
+        return;
+      }
       if (!isValid) {
         res.status(403).json({
           success: false,
@@ -484,6 +455,12 @@ export class FolderController {
             isValid: true,
             folder,
             grantedPermission: permission,
+            session: ShareLinkService.issueSession({
+              linkId: "legacy",
+              itemType: "FOLDER",
+              itemId: folder.id,
+              permission: permission === "EDIT" ? "EDIT" : "VIEW",
+            }),
           },
         });
       } else {
@@ -502,7 +479,8 @@ export class FolderController {
           data: {
             isValid: true,
             file,
-            grantedPermission: permission,
+            grantedPermission: "VIEW",
+            session: ShareLinkService.issueSession({ linkId: "legacy", itemType: "FILE", itemId: file.id, permission: "VIEW" }),
           },
         });
       }

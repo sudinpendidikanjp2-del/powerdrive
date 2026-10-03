@@ -4,6 +4,23 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [Unreleased]
+
+### Changed
+- Redesigned share-link access control (see `docs/SHARING.md`). Links are now rows in a new `ShareLink` table: the URL carries only an opaque id, and passwords (bcrypt) and email lists are kept on the server.
+  - Opening a link returns a 12-hour share session. Revoking or expiring the link ends sessions that are already open.
+- Signed-out reads, listings, downloads, thumbnails and uploads now require a share session that covers the target. Signed-in non-admins can read only their own folders, or folders a share session covers.
+- Bulk move/copy now requires write access to the target folder.
+- Uploads through an EDIT link are recorded under the shared folder's owner. Before this change they failed with a database error.
+- Upload and archive session ids are now 128-bit random values.
+
+### Removed
+- The per-folder base permission no longer grants public access.
+- The `/share-links` endpoints, which returned signed URLs with the password hash embedded.
+
+### Migration
+- Run `npm run db:push`. Old `?folderId=&perm=&sig=` links keep working and are exchanged for a share session.
+
 ## [1.0.0] - 2026-08-17 (Phase 08: System Hardening, End-to-End Verification & Production Release)
 
 ### Added

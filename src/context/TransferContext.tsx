@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useCallback, useRef, useEffect } from "react";
 import { ActiveTransfer, TransferProgress, TransferType, ArchiveSession, FileItem } from "../types/frontend.ts";
 import { api } from "../services/api.ts";
+import { withCredentialsQuery } from "../lib/credentials.ts";
 import { useDialog } from "./DialogContext.tsx";
 
 export interface UploadTask {
@@ -183,10 +184,7 @@ export const TransferProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       showToast(`Mulai mengunduh "${fileName}"`, "info");
 
       try {
-        const token = localStorage.getItem("auth_token");
-        const url = token
-          ? `/api/storage/files/${fileId}/download?token=${encodeURIComponent(token)}`
-          : `/api/storage/files/${fileId}/download`;
+        const url = withCredentialsQuery(`/api/storage/files/${fileId}/download`);
 
         const response = await fetch(url, { signal: abortController.signal });
         if (!response.ok) {
@@ -310,10 +308,7 @@ export const TransferProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       showToast(`Mengunduh part arsip "${params.partName}"`, "info");
 
       try {
-        const token = localStorage.getItem("auth_token");
-        const url = token
-          ? `/api/storage/bulk-download/part/${params.sessionId}/${params.partIndex}?token=${encodeURIComponent(token)}`
-          : `/api/storage/bulk-download/part/${params.sessionId}/${params.partIndex}`;
+        const url = withCredentialsQuery(`/api/storage/bulk-download/part/${params.sessionId}/${params.partIndex}`);
 
         const response = await fetch(url, { signal: abortController.signal });
         if (!response.ok) {

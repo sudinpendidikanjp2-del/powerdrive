@@ -106,7 +106,7 @@ export class ArchiveService {
 
     // 2. Partition files into parts
     const parts: ArchivePartManifest[] = [];
-    const sessionId = `arc_${Date.now()}_${crypto.randomBytes(4).toString("hex")}`;
+    const sessionId = `arc_${Date.now()}_${crypto.randomBytes(16).toString("hex")}`;
 
     const effectivePartSize = Math.max(5 * 1024 * 1024, partSizeBytes); // minimum 5MB
     const isMultiPart = totalSizeBytes > effectivePartSize || effectivePartSize < totalSizeBytes;

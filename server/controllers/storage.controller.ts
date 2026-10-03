@@ -7,7 +7,7 @@ import { GoogleDriveService } from "../services/google-drive.service.ts";
 import { db } from "../db/index.ts";
 import { ActivityAction, SyncStatus } from "../types/index.ts";
 import { AuditService } from "../services/audit.service.ts";
-import { ShareTokenService } from "../services/share-token.service.ts";
+import { AccessService } from "../services/access.service.ts";
 
 export function generateVideoThumbnailSvg(fileName: string, mimeType: string = "", sizeBytes: number = 0): string {
   const ext = fileName.split(".").pop()?.toUpperCase() || "MP4";
@@ -173,18 +173,7 @@ export class StorageController {
         return;
       }
 
-      // Check folder permissions
-      const targetFolder = await db.folder.findUnique({ where: { id: folderId } });
-      if (targetFolder) {
-        const isOwnerOrAdmin = req.user && (req.user.role === "ADMIN" || targetFolder.ownerId === req.user.id);
-        if (targetFolder.permission === "VIEW" && !isOwnerOrAdmin) {
-          res.status(403).json({
-            success: false,
-            error: "Folder ini memiliki hak akses Hanya Lihat (VIEW). Anda tidak diizinkan mengunggah berkas ke folder ini.",
-          });
-          return;
-        }
-      }
+      // Write access (owner, admin or an EDIT share link) is enforced by the route guard.
 
       // Handle both single file (req.file) and multiple files (req.files)
       const rawFiles: Express.Multer.File[] = [];
@@ -211,6 +200,7 @@ export class StorageController {
       const ipAddress = req.ip || req.socket.remoteAddress || "127.0.0.1";
       const userAgent = req.headers["user-agent"] || "unknown";
 
+      const uploader = await AccessService.uploaderFor(req, folderId);
       const uploadedResults = [];
       for (const file of rawFiles) {
         const saved = await StorageService.saveFile({
@@ -220,7 +210,7 @@ export class StorageController {
           size: file.size,
           folderId,
           conflictMode: conflictMode || "create_version",
-          user: req.user,
+          user: uploader,
           ipAddress,
           userAgent,
         });
@@ -1132,21 +1122,7 @@ export class StorageController {
         return;
       }
 
-      // Check folder permissions if targeting a specific subfolder
-      const targetFolderId = !folderId || folderId === "root" || folderId === "null" ? null : folderId;
-      if (targetFolderId) {
-        const targetFolder = await db.folder.findUnique({ where: { id: targetFolderId } });
-        if (targetFolder) {
-          const isOwnerOrAdmin = req.user && (req.user.role === "ADMIN" || targetFolder.ownerId === req.user.id);
-          if (targetFolder.permission === "VIEW" && !isOwnerOrAdmin) {
-            res.status(403).json({
-              success: false,
-              error: "Folder ini memiliki hak akses Hanya Lihat (VIEW). Anda tidak diizinkan mengunggah berkas ke folder ini.",
-            });
-            return;
-          }
-        }
-      }
+      // Write access (owner, admin or an EDIT share link) is enforced by the route guard.
 
       const ipAddress = req.ip || req.socket.remoteAddress || "127.0.0.1";
       const userAgent = req.headers["user-agent"] || "unknown";
@@ -1159,7 +1135,7 @@ export class StorageController {
         chunkSize: Number(chunkSize) || 1024 * 1024,
         totalChunks: Number(totalChunks),
         conflictMode: conflictMode || "create_version",
-        user: req.user,
+        user: await AccessService.uploaderFor(req, folderId),
         ipAddress,
         userAgent,
       });
@@ -1710,50 +1686,6 @@ export class StorageController {
       res.status(500).json({
         success: false,
         error: err.message || "Gagal menyalin berkas.",
-      });
-    }
-  }
-
-  /**
-   * Generates cryptographically signed preview / download links for a file
-   */
-  public static async getFileShareLinks(req: AuthenticatedRequest, res: Response): Promise<void> {
-    try {
-      const { id } = req.params;
-      const { pwdHash, emails } = req.query;
-      const file = await db.file.findUnique({ where: { id } });
-      if (!file) {
-        res.status(404).json({
-          success: false,
-          error: "Berkas tidak ditemukan",
-        });
-        return;
-      }
-      if (req.user?.role !== "ADMIN" && file.userId !== req.user?.id) {
-        const folder = file.folderId ? await db.folder.findUnique({ where: { id: file.folderId } }) : null;
-        if (!folder || folder.ownerId !== req.user?.id) {
-          res.status(403).json({ success: false, error: "Hanya pemilik berkas yang dapat membuat tautan bagikan." });
-          return;
-        }
-      }
-
-      const host = req.get("host") || "";
-      const protocol = req.protocol || "https";
-      const origin = `${protocol}://${host}`;
-
-      const links = ShareTokenService.getFileSecuredLinks(id, origin, pwdHash as string, emails as string);
-
-      res.status(200).json({
-        success: true,
-        data: {
-          file,
-          links,
-        },
-      });
-    } catch (error: any) {
-      res.status(500).json({
-        success: false,
-        error: error.message || "Gagal menghasilkan tautan bagikan berkas",
       });
     }
   }

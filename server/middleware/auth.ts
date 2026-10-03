@@ -2,12 +2,15 @@ import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 import { db } from "../db/index.ts";
 import { Role, UserRecord } from "../types/index.ts";
+import type { ShareGrant } from "../services/access.service.ts";
 
 const JWT_SECRET = process.env.SESSION_SECRET || "default-insecure-dev-session-secret-change-in-production";
 const REFRESH_JWT_SECRET = process.env.REFRESH_SESSION_SECRET || "default-insecure-refresh-secret-change-in-production";
 
 export interface AuthenticatedRequest extends Request {
   user?: UserRecord;
+  /** Set when the request carries a valid share session (from a share link). */
+  share?: ShareGrant;
 }
 
 export function generateToken(user: UserRecord): string {
@@ -55,6 +58,16 @@ export async function authenticate(
   next: NextFunction
 ): Promise<void> {
   try {
+    // A share session can accompany a login (a signed-in user opening a link).
+    const shareToken =
+      (req.headers["x-share-session"] as string | undefined) ||
+      (typeof req.query.share_session === "string" ? req.query.share_session : undefined);
+    if (shareToken) {
+      const { ShareLinkService } = await import("../services/share-link.service.ts");
+      const grant = await ShareLinkService.verifySession(shareToken);
+      if (grant) req.share = grant;
+    }
+
     let token: string | undefined = req.cookies?.token;
 
     if (!token && req.headers.authorization) {

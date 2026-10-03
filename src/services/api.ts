@@ -14,6 +14,8 @@ import {
   MountFileItem,
   PaginatedFilesResponse,
   PaginatedFoldersResponse,
+  ShareItemType,
+  ShareLink,
   SelfTestResult,
   StorageStats,
   SyncJob,
@@ -23,17 +25,12 @@ import {
   User,
 } from "../types/frontend.ts";
 
+import { applyXhrCredentials, authHeaders, getAuthToken, withCredentialsQuery } from "../lib/credentials.ts";
+
 const BASE_URL = "/api";
 
 function getHeaders(extraHeaders: Record<string, string> = {}) {
-  const token = localStorage.getItem("auth_token");
-  const headers: Record<string, string> = {
-    ...extraHeaders,
-  };
-  if (token) {
-    headers["Authorization"] = `Bearer ${token}`;
-  }
-  return headers;
+  return authHeaders(extraHeaders);
 }
 
 async function handleResponse<T>(res: Response): Promise<T> {
@@ -413,45 +410,47 @@ export const api = {
     return handleResponse(res);
   },
 
-  async getFolderShareLinks(id: string, pwdHash?: string, emails?: string): Promise<{
-    folder: Folder;
-    links: {
-      folderId: string;
-      viewLink: { permission: string; signature: string; url: string; name: string; description: string };
-      editLink: { permission: string; signature: string; url: string; name: string; description: string };
-    };
-  }> {
-    let url = `${BASE_URL}/folders/${id}/share-links`;
-    const params = new URLSearchParams();
-    if (pwdHash) params.append("pwdHash", pwdHash);
-    if (emails) params.append("emails", emails);
-    const queryString = params.toString();
-    if (queryString) {
-      url += `?${queryString}`;
-    }
-    const res = await fetch(url, {
-      headers: getHeaders(),
+  // --- SHARE LINKS ---
+  async listShareLinks(itemType: ShareItemType, itemId: string): Promise<{ links: ShareLink[] }> {
+    const q = new URLSearchParams({ itemType, itemId });
+    const res = await fetch(`${BASE_URL}/shares?${q.toString()}`, { headers: getHeaders() });
+    return handleResponse(res);
+  },
+
+  async createShareLink(payload: {
+    itemType: ShareItemType;
+    itemId: string;
+    permission: "VIEW" | "EDIT";
+    password?: string;
+    allowedEmails?: string[];
+    expiresInDays?: number;
+  }): Promise<{ link: ShareLink }> {
+    const res = await fetch(`${BASE_URL}/shares`, {
+      method: "POST",
+      headers: getHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify(payload),
     });
     return handleResponse(res);
   },
 
-  async getFileShareLinks(id: string, pwdHash?: string, emails?: string): Promise<{
-    file: FileItem;
-    links: {
-      fileId: string;
-      viewLink: { permission: string; signature: string; url: string; name: string; description: string };
-    };
-  }> {
-    let url = `${BASE_URL}/storage/files/${id}/share-links`;
-    const params = new URLSearchParams();
-    if (pwdHash) params.append("pwdHash", pwdHash);
-    if (emails) params.append("emails", emails);
-    const queryString = params.toString();
-    if (queryString) {
-      url += `?${queryString}`;
-    }
-    const res = await fetch(url, {
-      headers: getHeaders(),
+  async revokeShareLink(id: string): Promise<{ revoked: string }> {
+    const res = await fetch(`${BASE_URL}/shares/${encodeURIComponent(id)}`, { method: "DELETE", headers: getHeaders() });
+    return handleResponse(res);
+  },
+
+  async getShareGate(id: string): Promise<{ requiresPassword: boolean; requiresEmail: boolean; itemType: ShareItemType }> {
+    const res = await fetch(`${BASE_URL}/shares/${encodeURIComponent(id)}/gate`);
+    return handleResponse(res);
+  },
+
+  async openShareLink(
+    id: string,
+    payload: { password?: string; email?: string }
+  ): Promise<{ session: string; permission: "VIEW" | "EDIT"; itemType: ShareItemType; folder?: Folder; file?: FileItem }> {
+    const res = await fetch(`${BASE_URL}/shares/${encodeURIComponent(id)}/open`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
     });
     return handleResponse(res);
   },
@@ -464,7 +463,7 @@ export const api = {
     pwdHash?: string;
     emails?: string;
     emailInput?: string;
-  }): Promise<{ isValid: boolean; folder?: Folder; file?: FileItem; grantedPermission?: string; error?: string }> {
+  }): Promise<{ isValid: boolean; folder?: Folder; file?: FileItem; grantedPermission?: string; session?: string; error?: string }> {
     const res = await fetch(`${BASE_URL}/folders/verify-share-token`, {
       method: "POST",
       headers: getHeaders({ "Content-Type": "application/json" }),
@@ -545,11 +544,7 @@ export const api = {
       formData.append("files", file);
     }
 
-    const token = localStorage.getItem("auth_token");
-    const headers: Record<string, string> = {};
-    if (token) {
-      headers["Authorization"] = `Bearer ${token}`;
-    }
+    const headers = authHeaders();
 
     const res = await fetch(`${BASE_URL}/storage/upload`, {
       method: "POST",
@@ -587,10 +582,7 @@ export const api = {
       const xhr = new XMLHttpRequest();
       xhr.open("POST", `${BASE_URL}/storage/upload/chunk`);
 
-      const token = localStorage.getItem("auth_token");
-      if (token) {
-        xhr.setRequestHeader("Authorization", `Bearer ${token}`);
-      }
+      applyXhrCredentials(xhr);
 
       if (xhr.upload && onProgress) {
         xhr.upload.onprogress = (e) => {
@@ -828,18 +820,15 @@ export const api = {
   },
 
   getDownloadUrl(id: string): string {
-    const token = localStorage.getItem("auth_token");
-    return token ? `${BASE_URL}/storage/files/${id}/download?token=${encodeURIComponent(token)}` : `${BASE_URL}/storage/files/${id}/download`;
+    return withCredentialsQuery(`${BASE_URL}/storage/files/${id}/download`);
   },
 
   getViewUrl(id: string): string {
-    const token = localStorage.getItem("auth_token");
-    return token ? `${BASE_URL}/storage/files/${id}/view?token=${encodeURIComponent(token)}` : `${BASE_URL}/storage/files/${id}/view`;
+    return withCredentialsQuery(`${BASE_URL}/storage/files/${id}/view`);
   },
 
   getThumbnailUrl(id: string): string {
-    const token = localStorage.getItem("auth_token");
-    return token ? `${BASE_URL}/storage/files/${id}/thumbnail?token=${encodeURIComponent(token)}` : `${BASE_URL}/storage/files/${id}/thumbnail`;
+    return withCredentialsQuery(`${BASE_URL}/storage/files/${id}/thumbnail`);
   },
 
   async getFileTextContent(id: string): Promise<{
@@ -1056,11 +1045,7 @@ export const api = {
       formData.append("files", file);
     }
 
-    const token = localStorage.getItem("auth_token");
-    const headers: Record<string, string> = {};
-    if (token) {
-      headers["Authorization"] = `Bearer ${token}`;
-    }
+    const headers = authHeaders();
 
     const res = await fetch(`${BASE_URL}/mounts/${mountId}/upload`, {
       method: "POST",
@@ -1081,10 +1066,7 @@ export const api = {
       const xhr = new XMLHttpRequest();
       xhr.open("POST", `${BASE_URL}/mounts/${params.mountId}/upload`);
 
-      const token = localStorage.getItem("auth_token");
-      if (token) {
-        xhr.setRequestHeader("Authorization", `Bearer ${token}`);
-      }
+      applyXhrCredentials(xhr);
 
       const startTime = Date.now();
       const totalSize = params.files.reduce((acc, f) => acc + f.size, 0);
@@ -1166,7 +1148,7 @@ export const api = {
   },
 
   getMountFileViewUrl(mountId: string, subPath: string): string {
-    const token = localStorage.getItem("auth_token");
+    const token = getAuthToken();
     const query = new URLSearchParams();
     query.set("subPath", subPath);
     if (token) query.set("token", token);
@@ -1174,7 +1156,7 @@ export const api = {
   },
 
   getMountFileDownloadUrl(mountId: string, subPath: string): string {
-    const token = localStorage.getItem("auth_token");
+    const token = getAuthToken();
     const query = new URLSearchParams();
     query.set("subPath", subPath);
     if (token) query.set("token", token);
@@ -1420,10 +1402,7 @@ export const api = {
       const xhr = new XMLHttpRequest();
       xhr.open("POST", `${BASE_URL}/storage/upload`);
 
-      const token = localStorage.getItem("auth_token");
-      if (token) {
-        xhr.setRequestHeader("Authorization", `Bearer ${token}`);
-      }
+      applyXhrCredentials(xhr);
 
       const startTime = Date.now();
       const totalSize = params.files.reduce((acc, f) => acc + f.size, 0);

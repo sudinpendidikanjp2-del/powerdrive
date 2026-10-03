@@ -379,3 +379,18 @@ export interface PaginatedFilesResponse extends PaginationMeta {
 }
 
 
+
+export type ShareItemType = "FOLDER" | "FILE";
+
+/** A managed share link as its owner sees it. The id is the secret in the URL (?s=<id>). */
+export interface ShareLink {
+  id: string;
+  itemType: ShareItemType;
+  itemId: string;
+  permission: "VIEW" | "EDIT";
+  hasPassword: boolean;
+  allowedEmails: string[];
+  createdAt: string;
+  expiresAt: string | null;
+  lastOpenedAt: string | null;
+}

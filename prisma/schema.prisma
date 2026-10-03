@@ -223,3 +223,22 @@ model SystemSetting {
   description String?
   updatedAt   DateTime @updatedAt
 }
+
+/// A shareable link to one folder or file. The id is the secret that appears in
+/// the URL (?s=<id>); the optional password and email list are checked on the
+/// server, so holding the URL alone is not enough when they are set.
+model ShareLink {
+  id            String    @id
+  itemType      String    // "FOLDER" | "FILE"
+  itemId        String
+  permission    String    // "VIEW" | "EDIT" (EDIT allows uploads into a shared folder)
+  passwordHash  String?   // bcrypt
+  allowedEmails String[]  @default([])
+  createdById   String
+  createdAt     DateTime  @default(now())
+  expiresAt     DateTime?
+  revokedAt     DateTime?
+  lastOpenedAt  DateTime?
+
+  @@index([itemType, itemId])
+}

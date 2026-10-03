@@ -34,6 +34,7 @@ import { LazyThumbnail } from "../../components/LazyThumbnail.tsx";
 import { FilePreviewModal } from "../explorer/lazyDialogs.ts";
 
 interface PublicSharedFolderViewProps {
+  shareId?: string;
   initialFolderId?: string;
   fileId?: string;
   permParam?: string | null;
@@ -42,13 +43,14 @@ interface PublicSharedFolderViewProps {
 }
 
 export const PublicSharedFolderView: React.FC<PublicSharedFolderViewProps> = ({
+  shareId,
   initialFolderId,
   fileId,
   permParam,
   signatureParam,
   onGoToLogin,
 }) => {
-  const access = useShareAccess({ folderId: initialFolderId, fileId, permParam, signature: signatureParam });
+  const access = useShareAccess({ shareId, folderId: initialFolderId, fileId, permParam, signature: signatureParam });
   const { startFileDownload } = useTransfer();
   const [previewFile, setPreviewFile] = useState<FileItem | null>(null);
   const { state } = access;
