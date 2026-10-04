@@ -1,6 +1,34 @@
 # Deployment & Operational Specification
 # Centralized File Upload & Google Drive Synchronization Application
 
+## Local Development (no configuration needed)
+
+You need Node.js 20+ and Docker. `.env` is optional.
+
+```bash
+npm install
+npm run dev:local   # starts PostgreSQL in Docker, creates tables + admin, starts the app
+```
+
+Or step by step:
+
+```bash
+npm run db:local    # docker compose up -d --wait db  (PostgreSQL on localhost:5432)
+npm run db:init     # create tables, seed admin@clouddrive.local / AdminPassword2026!
+npm run dev         # http://localhost:3000
+```
+
+When `DATABASE_URL` is unset, the server and scripts connect to
+`postgresql://DB_USER:DB_PASSWORD@DB_HOST:DB_PORT/DB_NAME`. The defaults are `postgres` / `postgres` / `localhost` / `5432` / `file_upload_db`,
+the same database `npm run db:local` starts (both read `DB_*` from `.env` when present).
+Set `DATABASE_URL` only to use another PostgreSQL server. If the database cannot be reached, the server
+prints the address it tried and these commands, then exits.
+
+`npm run db:push` uses the same resolved `DATABASE_URL`. To stop the local database, run `docker compose stop db`.
+`docker compose down -v` also deletes its data.
+
+---
+
 ## 1. Runtime Environment Specifications
 
 - **Platform**: Node.js 20+ runtime in sandboxed Cloud Run container environment.
@@ -29,7 +57,7 @@
 | Variable | Description | Sensitivity |
 | :--- | :--- | :--- |
 | `PORT` | Container HTTP Port (Must be `3000`) | System Public |
-| `DATABASE_URL` | PostgreSQL connection string (`postgresql://...`) | Secret |
+| `DATABASE_URL` | PostgreSQL connection string (`postgresql://...`). Optional locally: built from `DB_*` when unset | Secret |
 | `SESSION_SECRET` | Secret key for signing user session tokens | Secret |
 | `GOOGLE_CLIENT_ID` | Google Cloud OAuth 2.0 Client ID | Non-sensitive Server config |
 | `GOOGLE_CLIENT_SECRET` | Google Cloud OAuth 2.0 Client Secret | Secret |

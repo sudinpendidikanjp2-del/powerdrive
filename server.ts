@@ -1,15 +1,33 @@
+import { database, describeDatabaseUrl } from "./server/config/env.ts";
 import express from "express";
 import path from "path";
 import cookieParser from "cookie-parser";
 import { createServer as createViteServer } from "vite";
 import { apiRouter } from "./server/routes/index.ts";
-import { db } from "./server/db/index.ts";
+import { db, prisma } from "./server/db/index.ts";
 import { SyncEngineService } from "./server/services/sync-engine.service.ts";
 import { PreviewService } from "./server/services/preview.service.ts";
 
 const PORT = 3000;
 
+async function connectDatabase() {
+  const target = describeDatabaseUrl(database.url);
+  if (database.isFallback) console.log(`[Database] DATABASE_URL is not set; using local database ${target}`);
+  try {
+    await prisma.$connect();
+  } catch (err: any) {
+    console.error(`\n[Database] Cannot connect to ${target}`);
+    console.error(`  ${String(err?.message || err).trim().split("\n").pop()}`);
+    console.error("\n  To start a local PostgreSQL with Docker:  npm run db:local");
+    console.error("  Then create the tables and admin account: npm run db:init");
+    console.error("  Or point DATABASE_URL (in .env) at an existing PostgreSQL server.\n");
+    process.exit(1);
+  }
+}
+
 async function startServer() {
+  await connectDatabase();
+
   // Ensure database baseline is initialized
   await db.initializeDefaultData();
 

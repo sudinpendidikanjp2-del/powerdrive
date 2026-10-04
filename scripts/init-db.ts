@@ -1,15 +1,13 @@
+import { database, describeDatabaseUrl } from "../server/config/env.ts";
 import { execSync } from "child_process";
 import bcrypt from "bcryptjs";
-import dotenv from "dotenv";
 import { PrismaClient } from "@prisma/client";
-
-// Load environment variables
-dotenv.config();
 
 async function initDatabase() {
   console.log("--------------------------------------------------");
   console.log("🚀 Starting Database Initialization Script...");
   console.log("--------------------------------------------------");
+  console.log(`🗄️  Database: ${describeDatabaseUrl(database.url)}${database.isFallback ? " (local default)" : ""}\n`);
 
   try {
     // 1. Run Prisma Generate to ensure client types are built

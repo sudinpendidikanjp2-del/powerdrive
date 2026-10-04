@@ -5,8 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
+    "dev:local": "npm run db:local && npm run db:init && npm run dev",
     "db:init": "tsx scripts/init-db.ts",
-    "db:push": "prisma db push",
+    "db:push": "tsx scripts/prisma.ts db push",
+    "db:local": "docker compose up -d --wait db",
     "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
     "start": "node dist/server.cjs",
     "preview": "vite preview",
